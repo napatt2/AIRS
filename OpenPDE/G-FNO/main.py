@@ -12,22 +12,23 @@ from torch.utils.data import DataLoader
 
 from models.GFNO import GFNO2d
 from utils import pde_data, LpLoss, eq_check_rt, eq_check_rf
+from scipy.io import loadmat
 
 # -----------------------------------------------------------------------------
 # 1) CONFIGURATION (edit these paths & hyper‐parameters)
 # -----------------------------------------------------------------------------
-DATA_PATH      = r"C:\Users\napat\Box\Research\ML\FNO\Dataset\ns_V1e-3_N5000_T50.mat"#./data/ns_V1e-4_N10000_T30.mat"
+DATA_PATH      = r"C:\Users\napat\Box\Research\ML\FNO\Dataset\ns_v1e-3_T50_2.mat"#./data/ns_V1e-4_N10000_T30.mat"
 RESULTS_DIR    = "./results/gfno2d_run"
 SEED           = 1
 
 # model / training hyper‐parameters
-T_IN           = 10        # number of input timesteps
-T_OUT          = 20        # number of output timesteps
+T_IN           = 1        # number of input timesteps
+T_OUT          = 50        # number of output timesteps
 SPATIAL_RES    = 64        # Sx = Sy
-N_TRAIN        = 1000
-N_VALID        = 100
-N_TEST         = 100
-BATCH_SIZE     = 20
+N_TRAIN        = 8
+N_VALID        = 1
+N_TEST         = 1
+BATCH_SIZE     = 1
 EPOCHS         = 100
 LEARNING_RATE  = 1e-3
 WEIGHT_DECAY   = 1e-4
@@ -35,7 +36,7 @@ EARLY_STOP     = 20        # stop if valid loss doesn't improve for this many ep
 MODES          = 12
 WIDTH          = 10
 GRID_TYPE      = "symmetric"  # or "cartesian", None
-STRATEGY       = "teacher_forcing"  # "markov", "recurrent", "oneshot"
+STRATEGY       = "oneshot" #"teacher_forcing","markov", "recurrent", "oneshot"
 
 # -----------------------------------------------------------------------------
 # 2) REPRODUCIBILITY
@@ -58,9 +59,21 @@ MODEL_SAVE= os.path.join(out_dir, "best_model.pt")
 # -----------------------------------------------------------------------------
 # 4) LOAD DATA
 # -----------------------------------------------------------------------------
+'''
 # Assumes MATLAB .mat file with variable 'u' of shape [Nt, Sy, Sx]
 with h5py.File(DATA_PATH, 'r') as f:
-    u = np.array(f['u'])
+    u = np.array(f['u_new'])
+# transpose if needed so that u.shape == (Nt, Sy, Sx)
+u = np.transpose(u, axes=(0,2,1))  # adjust depending on your file
+
+# add channel dimension
+data = torch.from_numpy(u[..., None].astype(np.float32))
+
+assert data.shape[0] >= N_TRAIN + N_VALID + N_TEST + T_IN + T_OUT
+'''
+#%%
+f = loadmat(DATA_PATH)
+u = np.array(f['u_new'])
 # transpose if needed so that u.shape == (Nt, Sy, Sx)
 u = np.transpose(u, axes=(0,2,1))  # adjust depending on your file
 
@@ -78,10 +91,29 @@ test_data  = data[-(N_TEST + T_IN + T_OUT):]
 train_ds = pde_data(train_data, train=True,  strategy=STRATEGY, T_in=T_IN, T_out=T_OUT)
 valid_ds = pde_data(valid_data, train=False, strategy=STRATEGY, T_in=T_IN, T_out=T_OUT)
 test_ds  = pde_data(test_data,  train=False, strategy=STRATEGY, T_in=T_IN, T_out=T_OUT)
+#%%
+x_train = u[:N_TRAIN,:,:,0:1]
+y_train = u[:N_TRAIN,:,:]
 
-train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
-valid_loader = DataLoader(valid_ds, batch_size=BATCH_SIZE, shuffle=False)
-test_loader  = DataLoader(test_ds,  batch_size=BATCH_SIZE, shuffle=False)
+x_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:,0:1]
+y_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:]
+
+x_test = u[N_TRAIN+N_VALID:,:,:,0:1]
+y_test = u[N_TRAIN+N_VALID:,:,:]
+
+x_train = torch.from_numpy(x_train).float()
+y_train = torch.from_numpy(y_train).float()
+
+x_valid = torch.from_numpy(x_valid).float()
+y_valid = torch.from_numpy(y_valid).float()
+
+x_test = torch.from_numpy(x_test).float()
+y_test = torch.from_numpy(y_test).float()
+#%%
+train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_train, y_train), batch_size=BATCH_SIZE, shuffle=True)
+valid_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_valid, y_valid), batch_size=BATCH_SIZE, shuffle=False)
+test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_test, y_test), batch_size=BATCH_SIZE, shuffle=False)
+
 
 # -----------------------------------------------------------------------------
 # 5) BUILD MODEL
@@ -113,7 +145,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     optimizer, T_max=EPOCHS * len(train_loader)
 )
 criterion = LpLoss(size_average=False)
-
+#%%
 # -----------------------------------------------------------------------------
 # 7) TRAINING LOOP
 # -----------------------------------------------------------------------------
@@ -127,6 +159,7 @@ for ep in range(1, EPOCHS+1):
         x_batch, y_batch = x_batch.to(device), y_batch.to(device)
         optimizer.zero_grad()
         pred = model(x_batch)
+        print(pred.shape, y_batch.shape)
         loss = criterion(pred.view(len(pred), -1,1),
                          y_batch.view(len(y_batch),-1,1))
         loss.backward()
