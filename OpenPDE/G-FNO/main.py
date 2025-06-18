@@ -92,13 +92,13 @@ train_ds = pde_data(train_data, train=True,  strategy=STRATEGY, T_in=T_IN, T_out
 valid_ds = pde_data(valid_data, train=False, strategy=STRATEGY, T_in=T_IN, T_out=T_OUT)
 test_ds  = pde_data(test_data,  train=False, strategy=STRATEGY, T_in=T_IN, T_out=T_OUT)
 #%%
-x_train = u[:N_TRAIN,:,:] #u[:N_TRAIN,:,:,0:1]
+x_train = u[:N_TRAIN,:,:,0:1]
 y_train = u[:N_TRAIN,:,:]
 
-x_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:] #u[N_TRAIN:N_TRAIN+N_VALID,:,:,0:1]
+x_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:,0:1]
 y_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:]
 
-x_test = u[N_TRAIN+N_VALID:,:,:] #u[N_TRAIN+N_VALID:,:,:,0:1]
+x_test = u[N_TRAIN+N_VALID:,:,:,0:1]
 y_test = u[N_TRAIN+N_VALID:,:,:]
 
 x_train = torch.from_numpy(x_train).float()
@@ -121,20 +121,31 @@ test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(x_test,
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # GFNO2d(num_channels, initial_step, modes, width, reflection=False, grid_type=None)
 initial_step = T_IN if STRATEGY in ("recurrent","teacher_forcing") else 1
+
 model = GFNO2d(
-    num_channels=50,
-    initial_step=initial_step,
-    modes=MODES,
-    width=WIDTH,
-    reflection=False,
-    grid_type=GRID_TYPE
+  in_channels=1,
+  out_channels=50,
+  modes=MODES,
+  width=WIDTH,
+  initial_step=1,
+  reflection=False,
+  grid_type=GRID_TYPE
 ).to(device)
+
+# model = GFNO2d(
+#     num_channels=1,
+#     initial_step=initial_step,
+#     modes=MODES,
+#     width=WIDTH,
+#     reflection=False,
+#     grid_type=GRID_TYPE
+# ).to(device)
 
 # equivariance sanity check on random input
 x0 = torch.randn(BATCH_SIZE, SPATIAL_RES, SPATIAL_RES, T_IN, 1).to(device)
 print("Rot equiv.:", eq_check_rt(model, x0, spatial_dims=[1,2]))
 print("Refl equiv.:", eq_check_rf(model, x0, spatial_dims=[1,2]))
-
+#%%
 # -----------------------------------------------------------------------------
 # 6) OPTIMIZER & LOSS
 # -----------------------------------------------------------------------------
@@ -174,8 +185,8 @@ for ep in range(1, EPOCHS+1):
         for xv, yv in valid_loader:
             xv, yv = xv.to(device), yv.to(device)
             pv = model(xv)
-            val_loss += criterion(pv.reshape(len(pred), -1,50),
-                                  yv.reshape(len(y_batch),-1,50)).item()
+            val_loss += criterion(pv.reshape(len(pv), -1,50),
+                                  yv.reshape(len(yv),-1,50)).item()
     val_loss /= len(valid_loader)
 
     writer.add_scalar("Loss/Train", train_loss, ep)
@@ -192,7 +203,7 @@ for ep in range(1, EPOCHS+1):
         if no_improve >= EARLY_STOP:
             print(f"No improvement for {EARLY_STOP} epochs — stopping.")
             break
-
+#%%
 # -----------------------------------------------------------------------------
 # 8) TEST
 # -----------------------------------------------------------------------------
@@ -203,8 +214,8 @@ with torch.no_grad():
     for xt, yt in test_loader:
         xt, yt = xt.to(device), yt.to(device)
         pt = model(xt)
-        test_loss += criterion(pt.view(len(pt),-1,1),
-                               yt.view(len(yt),-1,1)).item()
+        test_loss += criterion(pt.reshape(len(pt),-1,1),
+                               yt.reshape(len(yt),-1,1)).item()
 test_loss /= len(test_loader)
 print(f"TEST LOSS: {test_loss:.4e}")
 

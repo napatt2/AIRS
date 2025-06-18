@@ -204,7 +204,7 @@ class GNorm(nn.Module):
         return x
 
 class GFNO2d(nn.Module):
-    def __init__(self, num_channels, modes, width, initial_step, reflection, grid_type):
+    def __init__(self, in_channels, out_channels, modes, width, initial_step, reflection, grid_type):
         super(GFNO2d, self).__init__()
 
         """
@@ -224,7 +224,7 @@ class GFNO2d(nn.Module):
         self.width = width
 
         self.grid = grid(twoD=True, grid_type=grid_type)
-        self.p = GConv2d(in_channels=num_channels * initial_step + self.grid.grid_dim, out_channels=self.width, kernel_size=1,
+        self.p = GConv2d(in_channels=in_channels * initial_step + self.grid.grid_dim, out_channels=self.width, kernel_size=1,
                          reflection=reflection, first_layer=True)  # input channel is 12: the solution of the previous 10 timesteps + 2 locations (u(t-10, x, y), ..., u(t-1, x, y),  x, y)
         self.conv0 = GSpectralConv2d(in_channels=self.width, out_channels=self.width, modes=self.modes, reflection=reflection)
         self.conv1 = GSpectralConv2d(in_channels=self.width, out_channels=self.width, modes=self.modes, reflection=reflection)
@@ -239,7 +239,7 @@ class GFNO2d(nn.Module):
         self.w2 = GConv2d(in_channels=self.width, out_channels=self.width, kernel_size=1, reflection=reflection)
         self.w3 = GConv2d(in_channels=self.width, out_channels=self.width, kernel_size=1, reflection=reflection)
         self.norm = GNorm(self.width, group_size=4 * (1 + reflection))
-        self.q = GMLP2d(in_channels=self.width, out_channels=num_channels, mid_channels=self.width * 4, reflection=reflection,
+        self.q = GMLP2d(in_channels=self.width, out_channels=50, mid_channels=self.width * 4, reflection=reflection,
                         last_layer=True)  # output channel is 1: u(x, y)
 
     def forward(self, x):
