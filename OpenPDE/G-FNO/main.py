@@ -22,7 +22,7 @@ RESULTS_DIR    = "./results/gfno2d_run"
 SEED           = 1
 
 # model / training hyper‐parameters
-T_IN           = 1        # number of input timesteps
+T_IN           = 50        # number of input timesteps
 T_OUT          = 50        # number of output timesteps
 SPATIAL_RES    = 64        # Sx = Sy
 N_TRAIN        = 8
@@ -92,13 +92,13 @@ train_ds = pde_data(train_data, train=True,  strategy=STRATEGY, T_in=T_IN, T_out
 valid_ds = pde_data(valid_data, train=False, strategy=STRATEGY, T_in=T_IN, T_out=T_OUT)
 test_ds  = pde_data(test_data,  train=False, strategy=STRATEGY, T_in=T_IN, T_out=T_OUT)
 #%%
-x_train = u[:N_TRAIN,:,:,0:1]
+x_train = u[:N_TRAIN,:,:] #u[:N_TRAIN,:,:,0:1]
 y_train = u[:N_TRAIN,:,:]
 
-x_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:,0:1]
+x_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:] #u[N_TRAIN:N_TRAIN+N_VALID,:,:,0:1]
 y_valid = u[N_TRAIN:N_TRAIN+N_VALID,:,:]
 
-x_test = u[N_TRAIN+N_VALID:,:,:,0:1]
+x_test = u[N_TRAIN+N_VALID:,:,:] #u[N_TRAIN+N_VALID:,:,:,0:1]
 y_test = u[N_TRAIN+N_VALID:,:,:]
 
 x_train = torch.from_numpy(x_train).float()
@@ -122,7 +122,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # GFNO2d(num_channels, initial_step, modes, width, reflection=False, grid_type=None)
 initial_step = T_IN if STRATEGY in ("recurrent","teacher_forcing") else 1
 model = GFNO2d(
-    num_channels=1,
+    num_channels=50,
     initial_step=initial_step,
     modes=MODES,
     width=WIDTH,
@@ -159,9 +159,8 @@ for ep in range(1, EPOCHS+1):
         x_batch, y_batch = x_batch.to(device), y_batch.to(device)
         optimizer.zero_grad()
         pred = model(x_batch)
-        print(pred.shape, y_batch.shape)
-        loss = criterion(pred.view(len(pred), -1,1),
-                         y_batch.view(len(y_batch),-1,1))
+        loss = criterion(pred.reshape(len(pred), -1,50),
+                         y_batch.reshape(len(y_batch),-1,50))
         loss.backward()
         optimizer.step()
         scheduler.step()
@@ -175,8 +174,8 @@ for ep in range(1, EPOCHS+1):
         for xv, yv in valid_loader:
             xv, yv = xv.to(device), yv.to(device)
             pv = model(xv)
-            val_loss += criterion(pv.view(len(pv),-1,1),
-                                  yv.view(len(yv),-1,1)).item()
+            val_loss += criterion(pv.reshape(len(pred), -1,50),
+                                  yv.reshape(len(y_batch),-1,50)).item()
     val_loss /= len(valid_loader)
 
     writer.add_scalar("Loss/Train", train_loss, ep)
