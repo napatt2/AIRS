@@ -130,7 +130,7 @@ parser.add_argument("--sym", action="store_true", default=True, help="Use a symm
 parser.add_argument("--domain_size", type=float, default=1)
 args = parser.parse_args()
 
-device = torch.device('cuda')
+device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 #Resolution
 s = args.s # 256

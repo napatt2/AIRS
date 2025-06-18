@@ -8,5 +8,12 @@ OpenDFT/QHBench/QH9/test_codes/*
 OpenMI/**/seq/
 OpenMI/**/train_test.sh
 OpenMI/**/generate_test.sh
-
+OpenProt/
+OpenQM/
+OpenODE/
+OpenMol/
+OpenMI/
+OpenMat/
+OpenDFT/
+OpenBio/
 
